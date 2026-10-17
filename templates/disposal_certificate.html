@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('disposals_log') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i> Back to Log</a>
+            <button onclick="window.print()" class="btn btn-danger btn-sm"><i class="fas fa-print me-1"></i> Print Certificate</button>
+        </div>
+
+        <div class="card shadow p-4 border bg-white" id="certificateContent">
+            <div class="text-center border-bottom pb-3 mb-4">
+                <i class="fas fa-shield-virus fa-3x text-danger mb-2"></i>
+                <h4 class="fw-bold text-navy mb-0">CERTIFICATE OF PHARMACEUTICAL DESTRUCTION & QUARANTINE</h4>
+                <p class="text-muted small mb-0">Official Certificate Number: <strong>DSP-{{ "%04d"|format(disposal.id) }}</strong></p>
+                <div class="badge bg-danger text-uppercase mt-2">Hazardous Waste Compliance Audit</div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-6">
+                    <div class="text-muted small">Pharmaceutical Name</div>
+                    <div class="fw-bold fs-5 text-navy">{{ disposal.medicine_name }}</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted small">Therapeutic Category</div>
+                    <div class="fw-bold">{{ disposal.category or 'General Pharmaceutical' }}</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted small">Batch Identification</div>
+                    <div class="fw-bold"><code>{{ disposal.batch_number }}</code></div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted small">Expiry Date</div>
+                    <div class="fw-bold text-danger">{{ disposal.expiry_date }}</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted small">Quantity Destroyed / Quarantined</div>
+                    <div class="fw-bold fs-4 text-danger">{{ disposal.quantity }} Units</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted small">Reason for Condemnation</div>
+                    <div class="fw-bold">{{ disposal.reason }}</div>
+                </div>
+                <div class="col-12">
+                    <div class="text-muted small">Approved Method of Disposal</div>
+                    <div class="fw-bold">{{ disposal.disposal_method }}</div>
+                </div>
+                {% if disposal.notes %}
+                <div class="col-12">
+                    <div class="text-muted small">Inspection Remarks / Chain of Custody</div>
+                    <div class="p-2 bg-light rounded small border">{{ disposal.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="border-top pt-4 mt-4">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="text-muted small mb-4">Authorized Pharmacist:</div>
+                        <div class="border-top pt-1 fw-bold">{{ disposal.authorized_by_name or 'Chief Pharmacist' }}</div>
+                        <small class="text-muted">Digital Signature Verified</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small mb-4">Witness / Inspector:</div>
+                        <div class="border-top pt-1 fw-bold">{{ disposal.witness_name or 'Hospital Quality Officer' }}</div>
+                        <small class="text-muted">Quality Compliance Audit</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small mb-4">Destruction Date:</div>
+                        <div class="border-top pt-1 fw-bold">{{ disposal.disposed_at.strftime('%d %B %Y') if disposal.disposed_at else 'Verified' }}</div>
+                        <small class="text-muted">{{ disposal.disposed_at.strftime('%H:%M:%S UTC') if disposal.disposed_at else '' }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

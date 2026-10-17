@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="mb-0"><i class="fas fa-edit"></i> Edit Medicine: {{ medicine.name }}</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('edit_medicine', id=medicine.id) }}" method="POST">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Medicine Name *</label>
+                            <input type="text" class="form-control" name="name" value="{{ medicine.name }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Category *</label>
+                            <input type="text" class="form-control" name="category" value="{{ medicine.category }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Batch Number *</label>
+                            <input type="text" class="form-control" name="batch_number" value="{{ medicine.batch_number }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Manufacturer</label>
+                            <input type="text" class="form-control" name="manufacturer" value="{{ medicine.manufacturer or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Quantity *</label>
+                            <input type="number" class="form-control" name="quantity" min="0" value="{{ medicine.quantity }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Minimum Stock Level *</label>
+                            <input type="number" class="form-control" name="minimum_stock" min="0" value="{{ medicine.minimum_stock }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Manufacturing Date</label>
+                            <input type="date" class="form-control" name="manufacturing_date" id="mfg_date" value="{{ medicine.manufacturing_date or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Expiry Date *</label>
+                            <input type="date" class="form-control" name="expiry_date" id="exp_date" value="{{ medicine.expiry_date }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Purchase Date</label>
+                            <input type="date" class="form-control" name="purchase_date" value="{{ medicine.purchase_date or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Supplier Name</label>
+                            <input type="text" class="form-control" name="supplier_name" value="{{ medicine.supplier_name or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('inventory') }}" class="btn btn-secondary px-4">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Update Medicine</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.querySelector('form').addEventListener('submit', function(e) {
+        var mfg = document.getElementById('mfg_date').value;
+        var exp = document.getElementById('exp_date').value;
+        if(mfg && exp && mfg > exp) {
+            e.preventDefault();
+            alert('Expiry date must be after manufacturing date.');
+        }
+    });
+</script>
+{% endblock %}

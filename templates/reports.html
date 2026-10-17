@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h3 class="mb-0 text-navy"><i class="fas fa-file-invoice text-primary me-2"></i> Expiry & Compliance Reports</h3>
+        <p class="text-muted small mb-0">Detailed breakdown of quarantine requirements, upcoming deadlines, and stock health.</p>
+    </div>
+    
+    <div class="d-flex align-items-center gap-2">
+        {% if session.get('user_role') == 'admin' %}
+        <div class="btn-group btn-group-sm" role="group">
+            <a href="{{ url_for('reports', scope='all') }}" class="btn {% if scope == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                <i class="fas fa-hospital me-1"></i> Hospital-Wide
+            </a>
+            <a href="{{ url_for('reports', scope='mine') }}" class="btn {% if scope == 'mine' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                <i class="fas fa-user me-1"></i> My Stock
+            </a>
+        </div>
+        {% endif %}
+        
+        <a href="{{ url_for('export_pdf', scope=scope) }}" class="btn btn-sm btn-danger">
+            <i class="fas fa-file-pdf me-1"></i> Official PDF Audit Report
+        </a>
+        <a href="{{ url_for('export_csv', scope=scope) }}" class="btn btn-sm btn-success">
+            <i class="fas fa-file-csv me-1"></i> Export Report (CSV)
+        </a>
+    </div>
+</div>
+
+<ul class="nav nav-pills mb-4 bg-white p-2 rounded shadow-sm border" id="reportTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active py-2 px-3 fw-semibold" id="expired-tab" data-bs-toggle="tab" data-bs-target="#expired" type="button" role="tab">
+            <i class="fas fa-ban text-danger me-1"></i> Expired ({{ expired|length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link py-2 px-3 fw-semibold" id="soon7-tab" data-bs-toggle="tab" data-bs-target="#soon7" type="button" role="tab">
+            <i class="fas fa-hourglass-end text-warning me-1"></i> Expiring &lt; 7 Days ({{ expiring_7|length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link py-2 px-3 fw-semibold" id="soon30-tab" data-bs-toggle="tab" data-bs-target="#soon30" type="button" role="tab">
+            <i class="fas fa-clock text-info me-1"></i> Expiring &lt; 30 Days ({{ expiring_30|length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link py-2 px-3 fw-semibold" id="lowstock-tab" data-bs-toggle="tab" data-bs-target="#lowstock" type="button" role="tab">
+            <i class="fas fa-boxes-packing text-primary me-1"></i> Low Stock ({{ low_stock|length }})
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="reportTabsContent">
+    
+    <!-- Expired Tab -->
+    <div class="tab-pane fade show active" id="expired" role="tabpanel" aria-labelledby="expired-tab">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-danger text-white py-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-exclamation-triangle me-2"></i> Expired Medicines (Immediate Quarantine / Disposal)</span>
+                <span class="badge bg-white text-danger">{{ expired|length }} Items</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Medicine Name</th><th>Category</th><th>Batch Number</th><th>In Stock</th><th>Expiry Date</th><th>Expired Days Ago</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for med in expired %}
+                            <tr>
+                                <td class="fw-bold text-danger">{{ med.name }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                                <td><code>{{ med.batch_number }}</code></td>
+                                <td class="fw-bold">{{ med.quantity }} units</td>
+                                <td>{{ med.expiry_date }}</td>
+                                <td class="text-danger fw-bold"><i class="fas fa-arrow-down me-1"></i>{{ med.days_remaining|abs }} days ago</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success me-2"></i>No expired medicines in the selected scope.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7 Days Tab -->
+    <div class="tab-pane fade" id="soon7" role="tabpanel" aria-labelledby="soon7-tab">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-warning text-dark py-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-hourglass-half me-2"></i> Urgent: Expiring Within 7 Days</span>
+                <span class="badge bg-dark text-warning">{{ expiring_7|length }} Items</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Medicine Name</th><th>Category</th><th>Batch Number</th><th>In Stock</th><th>Expiry Date</th><th>Days Left</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for med in expiring_7 %}
+                            <tr>
+                                <td class="fw-bold text-navy">{{ med.name }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                                <td><code>{{ med.batch_number }}</code></td>
+                                <td class="fw-bold">{{ med.quantity }} units</td>
+                                <td>{{ med.expiry_date }}</td>
+                                <td class="text-warning fw-bold"><i class="fas fa-bell me-1"></i>{{ med.days_remaining }} days</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-4 text-muted">No medicines expiring in the next 7 days.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 30 Days Tab -->
+    <div class="tab-pane fade" id="soon30" role="tabpanel" aria-labelledby="soon30-tab">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-clock me-2"></i> Warning: Expiring Within 30 Days</span>
+                <span class="badge bg-white text-primary">{{ expiring_30|length }} Items</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Medicine Name</th><th>Category</th><th>Batch Number</th><th>In Stock</th><th>Expiry Date</th><th>Days Left</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for med in expiring_30 %}
+                            <tr>
+                                <td class="fw-bold text-navy">{{ med.name }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                                <td><code>{{ med.batch_number }}</code></td>
+                                <td class="fw-bold">{{ med.quantity }} units</td>
+                                <td>{{ med.expiry_date }}</td>
+                                <td class="text-primary fw-bold">{{ med.days_remaining }} days</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-4 text-muted">No medicines expiring in the next 30 days.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Low Stock Tab -->
+    <div class="tab-pane fade" id="lowstock" role="tabpanel" aria-labelledby="lowstock-tab">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-info text-white py-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-boxes-stacked me-2"></i> Low Stock Threshold Breaches</span>
+                <span class="badge bg-white text-info">{{ low_stock|length }} Items</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Medicine Name</th><th>Category</th><th>Batch Number</th><th>Current Stock</th><th>Safe Minimum</th><th>Deficit</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for med in low_stock %}
+                            <tr>
+                                <td class="fw-bold text-navy">{{ med.name }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                                <td><code>{{ med.batch_number }}</code></td>
+                                <td class="text-danger fw-bold fs-6">{{ med.quantity }} units</td>
+                                <td>{{ med.minimum_stock }} units</td>
+                                <td class="text-danger fw-bold"><i class="fas fa-arrow-down me-1"></i>Short by {{ med.minimum_stock - med.quantity }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success me-2"></i>All medicines meet or exceed minimum stock levels.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

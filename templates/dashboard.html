@@ -1,0 +1,849 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Top Dashboard Header & Controls -->
+<div class="row align-items-center mb-4">
+    <div class="col-lg-6 col-md-12 mb-3 mb-lg-0">
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3 text-primary">
+                <i class="fas fa-clinic-medical fa-2x"></i>
+            </div>
+            <div>
+                <h3 class="mb-0 fw-bold text-navy">Pharmacy Operations Dashboard</h3>
+                <div class="text-muted small mt-1">
+                    <span><i class="far fa-calendar-alt me-1"></i> Today: <strong>{{ now if now else "Active Session" }}</strong></span>
+                    <span class="mx-2">•</span>
+                    <span>Role: <strong class="text-primary">{{ session.get('user_role', 'pharmacist')|capitalize }}</strong></span>
+                    {% if session.get('user_role') == 'admin' %}
+                    <span class="badge bg-danger bg-opacity-10 text-danger ms-2 border border-danger">Admin Mode</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 col-md-12 text-lg-end">
+        <div class="d-inline-flex flex-wrap gap-2 align-items-center">
+            {% if session.get('user_role') == 'admin' %}
+            <div class="btn-group btn-group-sm" role="group">
+                <a href="{{ url_for('dashboard', scope='all') }}" class="btn {% if scope == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="fas fa-hospital me-1"></i> Hospital-Wide ({{ total_users_count }} Staff)
+                </a>
+                <a href="{{ url_for('dashboard', scope='mine') }}" class="btn {% if scope == 'mine' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="fas fa-user me-1"></i> My Entries
+                </a>
+            </div>
+            {% endif %}
+
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="openScannerModal(globalBarcodeFound)">
+                <i class="fas fa-barcode me-1"></i> Scan Barcode
+            </button>
+
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnReplayVoice">
+                <i class="fas fa-volume-up me-1 text-primary"></i> Audio Alert
+            </button>
+
+            {% if session.get('user_role') != 'viewer' %}
+            <a href="{{ url_for('add_medicine') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus-circle me-1"></i> Add Medicine
+            </a>
+            {% endif %}
+
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="requestInstantEmailReport()" title="Send itemized list of expired & shortage medicines to your email">
+                <i class="fas fa-envelope-open-text me-1"></i> Email List to Me
+            </button>
+
+            <a href="{{ url_for('export_pdf', scope=scope) }}" class="btn btn-sm btn-danger">
+                <i class="fas fa-file-pdf me-1"></i> PDF Audit Report
+            </a>
+            
+            <a href="{{ url_for('export_csv', scope=scope) }}" class="btn btn-sm btn-outline-success">
+                <i class="fas fa-file-csv me-1"></i> CSV
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Email Alert Status & Voice Notification Prompt Bar -->
+<div class="row g-2 mb-3">
+    <!-- Email Status Card -->
+    <div class="col-md-6">
+        {% if not smtp_configured %}
+        <div class="alert alert-warning py-2 px-3 mb-0 d-flex align-items-center justify-content-between shadow-sm border-warning small">
+            <div>
+                <i class="fas fa-envelope-circle-check text-warning me-2"></i>
+                <strong>Email Alerts Inactive:</strong> SMTP credentials not configured in <code>.env</code>.
+            </div>
+            <button class="btn btn-sm btn-outline-dark py-1 px-2 text-nowrap" data-bs-toggle="modal" data-bs-target="#emailSettingsModal">
+                <i class="fas fa-cog me-1"></i> Setup Email
+            </button>
+        </div>
+        {% else %}
+        <div class="alert alert-success py-2 px-3 mb-0 d-flex align-items-center justify-content-between shadow-sm border-success small">
+            <div>
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong>Email Alerts Active:</strong> Sending from <code>{{ smtp_username }}</code>
+            </div>
+            <button class="btn btn-sm btn-outline-success py-1 px-2 text-nowrap" data-bs-toggle="modal" data-bs-target="#emailSettingsModal">
+                <i class="fas fa-paper-plane me-1"></i> Test Email
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Voice Alert Audio Control Card -->
+    <div class="col-md-6">
+        <div class="alert alert-primary py-2 px-3 mb-0 d-flex align-items-center justify-content-between shadow-sm border-primary small" id="audioStatusBox">
+            <div>
+                <i class="fas fa-volume-high text-primary me-2"></i>
+                <span id="audioStatusText"><strong>Voice Alerts Ready:</strong> Click to test speech engine</span>
+            </div>
+            <button class="btn btn-sm btn-primary py-1 px-2 text-nowrap" onclick="triggerManualVoiceAlert()">
+                <i class="fas fa-play me-1"></i> Play Voice Alert
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Email Setup & Diagnostic Modal -->
+<div class="modal fade" id="emailSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-navy text-white">
+                <h5 class="modal-title"><i class="fas fa-envelope-circle-check text-info me-2"></i> Automated Email Alert Settings</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="fas fa-info-circle me-1"></i> <strong>Gmail Users:</strong> Google requires an <strong>App Password</strong> (16 characters) instead of your regular password.
+                    <br>Go to <em>Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords</em>.
+                </div>
+
+                <form id="smtpSettingsForm">
+                    <div class="mb-3">
+                        <label class="form-label">Sender Email Address (e.g. Gmail)</label>
+                        <input type="email" class="form-control" id="inputSmtpUser" name="smtp_username" value="{{ smtp_username or '' }}" placeholder="your_email@gmail.com" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Gmail App Password (16 characters)</label>
+                        <input type="password" class="form-control" id="inputSmtpPass" name="smtp_password" placeholder="e.g. abcd efgh ijkl mnop" required>
+                    </div>
+                    <button type="button" class="btn btn-primary w-100 mb-3" onclick="saveSmtpCredentials()">
+                        <i class="fas fa-save me-1"></i> Save Credentials to .env
+                    </button>
+                </form>
+
+                <hr>
+
+                <h6 class="fw-bold small text-navy mb-2"><i class="fas fa-vial me-1"></i> Test Live Email Delivery</h6>
+                <div class="input-group input-group-sm mb-2">
+                    <input type="email" class="form-control" id="testEmailRecipient" placeholder="Recipient Email" value="{{ session.get('user_email') }}">
+                    <button class="btn btn-success" type="button" onclick="sendDiagnosticEmail()">
+                        <i class="fas fa-paper-plane me-1"></i> Send Test Email
+                    </button>
+                </div>
+                <div id="emailTestFeedback" class="small mt-2" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Critical Action Banners (if any) -->
+{% if expired > 0 %}
+<div class="alert alert-danger d-flex align-items-center justify-content-between shadow-sm py-2 px-3 mb-3 border-danger" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-radiation fa-lg me-3 text-danger"></i>
+        <div>
+            <strong>CRITICAL ACTION REQUIRED:</strong> 
+            There are <strong>{{ expired }}</strong> expired medicines currently logged in the system. Expired pharmaceuticals must be quarantined and marked for disposal immediately.
+        </div>
+    </div>
+    <a href="{{ url_for('inventory', status='expired', scope=scope) }}" class="btn btn-sm btn-danger ms-3 text-nowrap">View Expired List</a>
+</div>
+{% endif %}
+
+{% if expiring_7 > 0 %}
+<div class="alert alert-warning d-flex align-items-center justify-content-between shadow-sm py-2 px-3 mb-3 border-warning" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-hourglass-end fa-lg me-3 text-dark"></i>
+        <div>
+            <strong>HIGH EXPIRY PRIORITY:</strong> 
+            <strong>{{ expiring_7 }}</strong> medicine(s) are set to expire in less than 7 days. Plan immediate rotation or prioritized dispensing.
+        </div>
+    </div>
+    <a href="{{ url_for('inventory', status='soon', scope=scope) }}" class="btn btn-sm btn-warning text-dark ms-3 text-nowrap">View Imminent</a>
+</div>
+{% endif %}
+
+{% if low_stock > 0 %}
+<div class="alert alert-info d-flex align-items-center justify-content-between shadow-sm py-2 px-3 mb-4 border-info" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-boxes-packing fa-lg me-3 text-info"></i>
+        <div>
+            <strong>SUPPLY REORDER ALERT:</strong> 
+            <strong>{{ low_stock }}</strong> medicine(s) have reached or dipped below their safe minimum stock threshold.
+        </div>
+    </div>
+    <a href="{{ url_for('inventory', status='low', scope=scope) }}" class="btn btn-sm btn-info text-white ms-3 text-nowrap">Review Restock</a>
+</div>
+{% endif %}
+
+<!-- Key Performance Indicators (KPI Cards) -->
+<div class="row g-3 mb-4">
+    <!-- Total Medicines -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card bg-primary text-white">
+            <i class="fas fa-pills kpi-icon"></i>
+            <div class="kpi-label text-white-50">Total Medicines</div>
+            <div class="kpi-value">{{ total_medicines }}</div>
+            <div class="kpi-subtext">
+                <i class="fas fa-cubes me-1"></i> Total Volume: <strong>{{ total_quantity }}</strong> units
+            </div>
+        </div>
+    </div>
+
+    <!-- Expired Medicines -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card bg-danger text-white">
+            <i class="fas fa-ban kpi-icon"></i>
+            <div class="kpi-label text-white-50">Already Expired</div>
+            <div class="kpi-value">{{ expired }}</div>
+            <div class="kpi-subtext">
+                {% if expired > 0 %}
+                <span class="badge bg-white text-danger fw-bold"><i class="fas fa-exclamation-triangle"></i> Quarantine Needed</span>
+                {% else %}
+                <span class="text-white-50"><i class="fas fa-check"></i> Zero expired stock</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Expiring Soon (<30 Days) -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card text-dark" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b;">
+            <i class="fas fa-clock kpi-icon text-warning"></i>
+            <div class="kpi-label text-secondary">Expiring Soon (30d)</div>
+            <div class="kpi-value text-dark">{{ expiring_soon }}</div>
+            <div class="kpi-subtext text-secondary">
+                <i class="fas fa-fire me-1 text-danger"></i> <strong>{{ expiring_7 }}</strong> critical within 7 days
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Health Index Score -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card text-white {% if health_score >= 80 %}bg-success{% elif health_score >= 50 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+            <i class="fas fa-heartbeat kpi-icon"></i>
+            <div class="kpi-label {% if health_score >= 80 or health_score < 50 %}text-white-50{% else %}text-secondary{% endif %}">Inventory Safety Index</div>
+            <div class="kpi-value">{{ health_score }}%</div>
+            <div class="progress bg-white bg-opacity-25" style="height: 6px; border-radius: 4px;">
+                <div class="progress-bar bg-white" role="progressbar" style="width: {{ health_score }}%"></div>
+            </div>
+            <div class="kpi-subtext mt-1 {% if health_score >= 80 or health_score < 50 %}text-white-50{% else %}text-secondary{% endif %}">
+                {% if health_score >= 80 %}Safe & Compliant Stock
+                {% elif health_score >= 50 %}Action Recommended
+                {% else %}Severe Risk Profile{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Interactive Analytics Charts Row -->
+<div class="row g-3 mb-4">
+    <!-- Chart 1: Expiry Status Breakdown -->
+    <div class="col-lg-4 col-md-12">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 text-navy"><i class="fas fa-chart-pie me-2 text-primary"></i> Expiry Status Breakdown</h6>
+                <span class="badge bg-light text-secondary border">Realtime</span>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="chart-container">
+                    <canvas id="expiryStatusChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-around text-center mt-3 pt-2 border-top small">
+                    <div>
+                        <span class="d-inline-block rounded-circle bg-success me-1" style="width: 8px; height: 8px;"></span>
+                        <span>Safe: <strong>{{ safe_count }}</strong></span>
+                    </div>
+                    <div>
+                        <span class="d-inline-block rounded-circle bg-warning me-1" style="width: 8px; height: 8px;"></span>
+                        <span>Expiring: <strong>{{ expiring_soon }}</strong></span>
+                    </div>
+                    <div>
+                        <span class="d-inline-block rounded-circle bg-danger me-1" style="width: 8px; height: 8px;"></span>
+                        <span>Expired: <strong>{{ expired }}</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart 2: Expiry Risk Timeline (Next 60 Days) -->
+    <div class="col-lg-5 col-md-12">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 text-navy"><i class="fas fa-calendar-week me-2 text-primary"></i> Expiry Risk Timeline</h6>
+                <span class="badge bg-light text-secondary border">Forecast</span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="expiryTimelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart 3: Top Medicine Categories -->
+    <div class="col-lg-3 col-md-12">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 text-navy"><i class="fas fa-layer-group me-2 text-primary"></i> Categories</h6>
+                <span class="badge bg-light text-secondary border">Diversity</span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="categoriesChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Medicine Inventory Table with Live Filter & Tap Voice Alert -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h6 class="mb-0 text-navy"><i class="fas fa-list-check me-2 text-primary"></i> Recent Inventory Log</h6>
+                    <small class="text-muted"><i class="fas fa-hand-pointer text-primary"></i> Tap any row to hear audio expiry countdown (voice alert for medicines &le; 10 days)</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm" style="max-width: 250px;">
+                        <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" id="dashboardSearchInput" class="form-control border-start-0" placeholder="Filter this list...">
+                    </div>
+                    <a href="{{ url_for('inventory', scope=scope) }}" class="btn btn-sm btn-outline-primary text-nowrap">
+                        View All <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0" id="dashboardTable">
+                        <thead>
+                            <tr>
+                                <th>Medicine Name</th>
+                                <th>Category</th>
+                                <th>Batch No.</th>
+                                <th>Quantity / Status</th>
+                                <th>Expiry Date</th>
+                                <th>Days Left</th>
+                                <th>Condition</th>
+                                {% if session.get('user_role') != 'viewer' %}
+                                <th class="text-end">Quick Actions</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for med in recent_medicines %}
+                            <tr class="row-interactive" onclick="checkMedicineExpiry('{{ med.name|escape }}', {{ med.days_remaining }})">
+                                <td>
+                                    <div class="fw-bold text-navy">{{ med.name }}</div>
+                                    <small class="text-muted">{{ med.manufacturer if med.manufacturer else "Standard Pharma" }}</small>
+                                </td>
+                                <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                                <td><code class="text-secondary fw-bold">{{ med.batch_number }}</code></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-bold">{{ med.quantity }} units</span>
+                                        {% if med.low_stock %}
+                                        <span class="badge bg-danger rounded-pill"><i class="fas fa-arrow-down me-1"></i>Low Stock</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>{{ med.expiry_date }}</td>
+                                <td>
+                                    {% if med.days_remaining < 0 %}
+                                    <span class="text-danger fw-bold"><i class="fas fa-times-circle me-1"></i>{{ med.days_remaining|abs }} days ago</span>
+                                    {% elif med.days_remaining == 0 %}
+                                    <span class="text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i>Expires Today</span>
+                                    {% elif med.days_remaining <= 10 %}
+                                    <span class="text-warning fw-bold"><i class="fas fa-bell me-1"></i>{{ med.days_remaining }} days</span>
+                                    {% else %}
+                                    <span class="text-success"><i class="fas fa-calendar-check me-1"></i>{{ med.days_remaining }} days</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if med.status == 'Expired' %}
+                                        <span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Expired</span>
+                                    {% elif med.status == 'Expiring Soon' %}
+                                        <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Expiring Soon</span>
+                                    {% else %}
+                                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Safe</span>
+                                    {% endif %}
+                                </td>
+                                {% if session.get('user_role') != 'viewer' %}
+                                <td class="text-end" onclick="event.stopPropagation();">
+                                    {% if med.status == 'Expired' %}
+                                    <a href="{{ url_for('quarantine_medicine', medicine_id=med.id) }}" class="btn btn-sm btn-danger py-1 px-2" title="Quarantine & Destroy">
+                                        <i class="fas fa-biohazard me-1"></i> Quarantine
+                                    </a>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-outline-primary py-1 px-2" data-bs-toggle="modal" data-bs-target="#restockModal{{ med.id }}" title="Quick Restock">
+                                        <i class="fas fa-plus"></i> Restock
+                                    </button>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            </tr>
+
+                            <!-- Quick Restock Modal for this item -->
+                            <div class="modal fade" id="restockModal{{ med.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('quick_update_stock', id=med.id) }}" method="POST">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title"><i class="fas fa-boxes-packing text-primary me-2"></i> Quick Restock: {{ med.name }}</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="text-muted small mb-3">
+                                                    Current Quantity: <strong>{{ med.quantity }}</strong> units | Minimum Stock: <strong>{{ med.minimum_stock }}</strong> units
+                                                </p>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Add Stock (Quantity to Add)</label>
+                                                    <input type="number" class="form-control" name="additional_quantity" min="1" value="50" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Update Quantity</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="fas fa-box-open fa-2x mb-2 d-block opacity-50"></i>
+                                    No medicines logged yet. {% if session.get('user_role') != 'viewer' %}<a href="{{ url_for('add_medicine') }}">Add your first medicine</a>{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- SCRIPT: ADVANCED CHARTS & VOICE ALERT ENGINE   -->
+<!-- ============================================== -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. DATA FROM BACKEND FOR CHART.JS
+    const safeCount = {{ safe_count }};
+    const expiringSoon = {{ expiring_soon }};
+    const expiredCount = {{ expired }};
+    const lowStockCount = {{ low_stock }};
+    const expiring7Count = {{ expiring_7 }};
+
+    const categoriesData = {{ categories_json|safe }};
+    const timelineData = {{ timeline_json|safe }};
+    const speechDetails = {{ speech_details_json|safe }};
+
+    // ---------------------------------------------
+    // CHART 1: Expiry Status Breakdown (Doughnut)
+    // ---------------------------------------------
+    const ctxStatus = document.getElementById('expiryStatusChart');
+    if (ctxStatus) {
+        new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: ['Safe (>30d)', 'Expiring Soon (≤30d)', 'Expired'],
+                datasets: [{
+                    data: [safeCount, expiringSoon, expiredCount],
+                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                cutout: '72%'
+            }
+        });
+    }
+
+    // ---------------------------------------------
+    // CHART 2: Expiry Risk Timeline (Bar Chart)
+    // ---------------------------------------------
+    const ctxTimeline = document.getElementById('expiryTimelineChart');
+    if (ctxTimeline) {
+        new Chart(ctxTimeline, {
+            type: 'bar',
+            data: {
+                labels: ['Expired', 'Next 7 Days', '8-30 Days', '31-60 Days', '>60 Days Safe'],
+                datasets: [{
+                    label: 'Medicines',
+                    data: [
+                        timelineData.expired || 0,
+                        timelineData.days_7 || 0,
+                        timelineData.days_30 || 0,
+                        timelineData.days_60 || 0,
+                        timelineData.safe || 0
+                    ],
+                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#3b82f6', '#10b981'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // ---------------------------------------------
+    // CHART 3: Categories Chart (Polar / Horizontal Bar)
+    // ---------------------------------------------
+    const ctxCategory = document.getElementById('categoriesChart');
+    if (ctxCategory) {
+        const catLabels = Object.keys(categoriesData);
+        const catValues = Object.values(categoriesData);
+
+        new Chart(ctxCategory, {
+            type: 'doughnut',
+            data: {
+                labels: catLabels.length ? catLabels : ['None'],
+                datasets: [{
+                    data: catValues.length ? catValues : [0],
+                    backgroundColor: [
+                        '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f97316'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, font: { size: 10 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // ---------------------------------------------
+    // 2. LIVE SEARCH FILTER FOR RECENT TABLE
+    // ---------------------------------------------
+    const searchInput = document.getElementById('dashboardSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const query = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#dashboardTable tbody tr');
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+
+    // ---------------------------------------------
+    // 3. VOICE ALERT ENGINE (Audible Chime + Speech)
+    // ---------------------------------------------
+    function playAudioChime() {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.35);
+        } catch(e) {
+            console.warn("Audio chime:", e);
+        }
+    }
+
+    window.speakAlertMessage = function(message) {
+        if (!('speechSynthesis' in window)) {
+            console.warn("SpeechSynthesis not supported.");
+            return;
+        }
+
+        playAudioChime();
+
+        if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+        }
+        window.speechSynthesis.cancel();
+
+        setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(message);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.95;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            const voices = window.speechSynthesis.getVoices();
+            if (voices && voices.length > 0) {
+                const preferredVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+                utterance.voice = preferredVoice;
+            }
+
+            utterance.onstart = function() {
+                const statusBox = document.getElementById('audioStatusText');
+                if (statusBox) statusBox.innerHTML = "<strong>🔊 Speaking Alert:</strong> Playing audio announcement...";
+            };
+
+            utterance.onend = function() {
+                const statusBox = document.getElementById('audioStatusText');
+                if (statusBox) statusBox.innerHTML = "<strong>Voice Alerts Active:</strong> Speech completed";
+            };
+
+            utterance.onerror = function(err) {
+                console.warn("Speech synthesis error:", err);
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }, 80);
+    };
+
+    window.triggerManualVoiceAlert = function() {
+        let alertSummary = "";
+
+        if (speechDetails && speechDetails.expired_names && speechDetails.expired_names.length > 0) {
+            alertSummary += "Attention: The following tablets have already expired: " + speechDetails.expired_names.join(", ") + ". Mandatory quarantine required. ";
+        } else if (expiredCount > 0) {
+            alertSummary += "Attention: You have " + expiredCount + " expired medicines requiring immediate quarantine. ";
+        }
+
+        if (speechDetails && speechDetails.expiring_names && speechDetails.expiring_names.length > 0) {
+            alertSummary += "The following tablets are expiring soon: " + speechDetails.expiring_names.join(", ") + ". Please prioritize dispensing. ";
+        } else if (expiringSoon > 0) {
+            alertSummary += "Notice: " + expiringSoon + " medicines are expiring within thirty days. ";
+        }
+
+        if (speechDetails && speechDetails.low_stock_names && speechDetails.low_stock_names.length > 0) {
+            alertSummary += "Shortage of stock detected for: " + speechDetails.low_stock_names.join(", ") + ". Reorder required. ";
+        } else if (lowStockCount > 0) {
+            alertSummary += "Also, " + lowStockCount + " medicines have reached low stock threshold. ";
+        }
+
+        if (!alertSummary) {
+            alertSummary = "All tablet stocks are healthy and within safe expiration dates.";
+        } else {
+            alertSummary = "Pharmacy Alert. " + alertSummary;
+        }
+
+        window.speakAlertMessage(alertSummary);
+    };
+
+    window.requestInstantEmailReport = function() {
+        showFloatingNotification("Generating itemized lists and transmitting email dispatch...", "info");
+        fetch("{{ url_for('send_inventory_email') }}", {
+            method: 'POST'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showFloatingNotification(data.message, "success");
+            } else {
+                showFloatingNotification(data.error, "danger");
+            }
+        })
+        .catch(err => {
+            showFloatingNotification("Network error sending email: " + err, "danger");
+        });
+    };
+
+    // Auto-prompt on page load
+    setTimeout(() => {
+        if (expiredCount > 0 || expiringSoon > 0 || lowStockCount > 0) {
+            // Try speech directly
+            window.triggerManualVoiceAlert();
+        }
+    }, 600);
+
+    // Also trigger on first user click if browser autoplay blocked the timeout
+    let userClicked = false;
+    document.addEventListener('click', function unlockAudioOnFirstClick() {
+        if (!userClicked && (expiredCount > 0 || expiringSoon > 0 || lowStockCount > 0)) {
+            userClicked = true;
+            window.triggerManualVoiceAlert();
+        }
+        document.removeEventListener('click', unlockAudioOnFirstClick);
+    }, { once: true });
+
+    const btnReplay = document.getElementById('btnReplayVoice');
+    if (btnReplay) {
+        btnReplay.addEventListener('click', function() {
+            window.triggerManualVoiceAlert();
+        });
+    }
+});
+
+// ---------------------------------------------
+// 4. FLOATING TOAST NOTIFIER (REPLACES BLOCKING ALERT)
+// ---------------------------------------------
+function showFloatingNotification(msg, type = 'warning') {
+    let container = document.getElementById('medAlertToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'medAlertToastContainer';
+        container.style.position = 'fixed';
+        container.style.bottom = '24px';
+        container.style.right = '24px';
+        container.style.zIndex = '9999';
+        container.style.maxWidth = '360px';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} shadow-lg py-3 px-3 mb-2 border d-flex align-items-center justify-content-between fade show`;
+    toast.style.borderRadius = '10px';
+    toast.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas ${type === 'danger' ? 'fa-ban text-danger' : type === 'warning' ? 'fa-clock text-warning' : 'fa-check-circle text-success'} fa-lg me-2"></i>
+            <span class="small fw-semibold">${msg}</span>
+        </div>
+        <button type="button" class="btn-close btn-sm ms-2" onclick="this.parentElement.remove()"></button>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast.parentElement) toast.remove();
+    }, 6000);
+}
+
+// ---------------------------------------------
+// 5. INTERACTIVE ROW TAP EXIRY ALERT
+// ---------------------------------------------
+function checkMedicineExpiry(name, days) {
+    let msg = "";
+    let toastType = "success";
+
+    if (days < 0) {
+        msg = "Warning: " + name + " has already expired " + Math.abs(days) + " days ago. Do not dispense.";
+        toastType = "danger";
+    } else if (days === 0) {
+        msg = "Urgent: " + name + " expires today! Please inspect.";
+        toastType = "danger";
+    } else if (days <= 10) {
+        msg = "Notice: " + name + " is expiring in " + days + " days.";
+        toastType = "warning";
+    } else {
+        msg = name + " is safe with " + days + " days remaining until expiry.";
+        toastType = "success";
+    }
+
+    // Show non-blocking visual toast so speech is NEVER paused!
+    showFloatingNotification(msg, toastType);
+
+    // Speak audio aloud
+    window.speakAlertMessage(msg);
+}
+
+// ---------------------------------------------
+// 6. SMTP EMAIL DIAGNOSTIC & CONFIGURATION AJAX
+// ---------------------------------------------
+function sendDiagnosticEmail() {
+    const recipient = document.getElementById('testEmailRecipient').value;
+    const feedback = document.getElementById('emailTestFeedback');
+    feedback.style.display = 'block';
+    feedback.className = 'alert alert-info py-2 small';
+    feedback.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Connecting to SMTP server and transmitting test email...';
+
+    const formData = new FormData();
+    formData.append('target_email', recipient);
+
+    fetch("{{ url_for('test_email') }}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            feedback.className = 'alert alert-success py-2 small';
+            feedback.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + data.message;
+        } else {
+            feedback.className = 'alert alert-danger py-2 small';
+            feedback.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + data.error;
+        }
+    })
+    .catch(err => {
+        feedback.className = 'alert alert-danger py-2 small';
+        feedback.innerHTML = '<i class="fas fa-times-circle me-1"></i> Network error: ' + err;
+    });
+}
+
+function saveSmtpCredentials() {
+    const user = document.getElementById('inputSmtpUser').value;
+    const pass = document.getElementById('inputSmtpPass').value;
+    const feedback = document.getElementById('emailTestFeedback');
+    feedback.style.display = 'block';
+    feedback.className = 'alert alert-info py-2 small';
+    feedback.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Updating credentials in .env...';
+
+    const formData = new FormData();
+    formData.append('smtp_username', user);
+    formData.append('smtp_password', pass);
+
+    fetch("{{ url_for('save_smtp') }}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            feedback.className = 'alert alert-success py-2 small';
+            feedback.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + data.message + ' (Testing connection recommended)';
+            setTimeout(() => {
+                location.reload();
+            }, 1200);
+        } else {
+            feedback.className = 'alert alert-danger py-2 small';
+            feedback.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + data.error;
+        }
+    })
+    .catch(err => {
+        feedback.className = 'alert alert-danger py-2 small';
+        feedback.innerHTML = 'Error: ' + err;
+    });
+}
+</script>
+{% endblock %}

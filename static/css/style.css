@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+body {
+    background-color: #f1f5f9;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+}
+
+/* Typography and Formal adjustments */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.text-navy {
+    color: #0f172a !important;
+}
+
+/* Navbar */
+.bg-navy {
+    background-color: #0f172a !important;
+}
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+.nav-link {
+    font-weight: 500;
+}
+
+/* Cards */
+.card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    background-color: #ffffff;
+    margin-bottom: 24px;
+}
+.card-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.3px;
+}
+
+/* Advanced KPI Cards */
+.kpi-card {
+    border-radius: 10px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.09);
+}
+.kpi-icon {
+    font-size: 2.2rem;
+    opacity: 0.2;
+    position: absolute;
+    right: 20px;
+    top: 20px;
+}
+.kpi-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+}
+.kpi-value {
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 6px;
+}
+.kpi-subtext {
+    font-size: 0.8rem;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+/* Tables */
+.table {
+    margin-bottom: 0;
+}
+.table th {
+    background-color: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 12px 16px;
+}
+.table td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    font-size: 0.875rem;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+}
+.table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+/* Tap to alert cursor */
+.row-interactive {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.row-interactive:hover {
+    background-color: #f1f5f9 !important;
+}
+
+/* Badges */
+.badge {
+    font-weight: 600;
+    padding: 0.45em 0.75em;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+}
+
+/* Forms */
+.form-label {
+    font-weight: 600;
+    color: #334155;
+    font-size: 0.875rem;
+}
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.875rem;
+}
+.form-control:focus, .form-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Buttons */
+.btn {
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.5rem 1.15rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+/* Chart containers */
+.chart-container {
+    position: relative;
+    height: 260px;
+    width: 100%;
+}
+
+/* Auth Pages */
+.auth-wrapper {
+    max-width: 480px;
+    margin: 40px auto;
+}
+.auth-header {
+    background-color: #0f172a;
+    color: white;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h3 class="mb-0 text-navy"><i class="fas fa-history text-primary me-2"></i> Dispensing Audit Trail</h3>
+        <p class="text-muted small mb-0">Complete historical log of all dispensed pharmaceuticals and destination allocations.</p>
+    </div>
+    <a href="{{ url_for('fefo_workspace') }}" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus me-1"></i> New FEFO Dispense
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <h6 class="mb-0 text-navy"><i class="fas fa-list-check me-2 text-primary"></i> Historical Log ({{ dispenses|length }} Records)</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Medicine</th>
+                        <th>Batch Dispatched</th>
+                        <th>Quantity Dispensed</th>
+                        <th>Patient / Ward / Destination</th>
+                        <th>Dispensed By (Staff)</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in dispenses %}
+                    <tr>
+                        <td><strong>#{{ d.id }}</strong></td>
+                        <td class="fw-bold text-navy">{{ d.medicine_name }}</td>
+                        <td><code>{{ d.batch_number }}</code></td>
+                        <td><span class="badge bg-success fs-6">{{ d.quantity }} units</span></td>
+                        <td>{{ d.patient_or_dest }}</td>
+                        <td>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="fas fa-user-nurse me-1"></i>{{ d.staff_name or 'System' }} ({{ d.staff_role or 'Staff' }})
+                            </span>
+                        </td>
+                        <td class="text-muted small">{{ d.dispensed_at.strftime('%Y-%m-%d %H:%M') if d.dispensed_at else 'N/A' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="fas fa-box-open fa-2x mb-2 d-block opacity-50"></i>
+                            No dispensing records logged yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

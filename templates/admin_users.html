@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-0 text-navy"><i class="fas fa-users-cog me-2"></i> System Administration & User Management</h3>
+        <p class="text-muted small mb-0">Manage system roles, permissions, and audit user inventory records.</p>
+    </div>
+    <span class="badge bg-primary px-3 py-2"><i class="fas fa-shield-alt me-1"></i> Admin Console</span>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <h6 class="mb-0 text-secondary"><i class="fas fa-user-friends me-2"></i> Registered System Users ({{ users|length }})</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>User Name</th>
+                        <th>Email Address</th>
+                        <th>Role / Permissions</th>
+                        <th>Medicines Logged</th>
+                        <th>Total Units</th>
+                        <th>Registered Date</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td><strong>#{{ u.id }}</strong></td>
+                        <td>
+                            <div class="fw-bold">{{ u.name }}</div>
+                            {% if u.id == session.get('user_id') %}
+                            <span class="badge bg-secondary" style="font-size: 0.7rem;">Current Session</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ u.email }}</td>
+                        <td>
+                            <form action="{{ url_for('update_user_role', user_id=u.id) }}" method="POST" class="d-flex align-items-center gap-2">
+                                <select name="role" class="form-select form-select-sm" style="width: 140px;" onchange="this.form.submit()">
+                                    <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+                                    <option value="pharmacist" {% if u.role == 'pharmacist' %}selected{% endif %}>Pharmacist</option>
+                                    <option value="staff" {% if u.role == 'staff' %}selected{% endif %}>Staff</option>
+                                    <option value="viewer" {% if u.role == 'viewer' %}selected{% endif %}>Doctor/Viewer</option>
+                                </select>
+                            </form>
+                        </td>
+                        <td><span class="badge bg-light text-dark border">{{ u.total_medicines }} items</span></td>
+                        <td>{{ u.total_quantity }} units</td>
+                        <td class="text-muted small">{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else 'N/A' }}</td>
+                        <td class="text-center">
+                            {% if u.id != session.get('user_id') %}
+                            <form action="{{ url_for('delete_user', user_id=u.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Warning: Deleting user {{ u.name }} will also permanently remove all their medicine inventory. Proceed?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete User">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small italic">Protected</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">No registered users found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

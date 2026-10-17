@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h3 class="mb-0 text-navy"><i class="fas fa-boxes me-2 text-primary"></i> Pharmaceutical Inventory</h3>
+        <p class="text-muted small mb-0">Search, filter, update quantities, and monitor expiry horizons.</p>
+    </div>
+    
+    <div class="d-flex align-items-center gap-2">
+        {% if session.get('user_role') == 'admin' %}
+        <div class="btn-group btn-group-sm" role="group">
+            <a href="{{ url_for('inventory', scope='all', status=status_filter, search=search) }}" class="btn {% if scope == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                <i class="fas fa-hospital me-1"></i> All Hospital Stock
+            </a>
+            <a href="{{ url_for('inventory', scope='mine', status=status_filter, search=search) }}" class="btn {% if scope == 'mine' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                <i class="fas fa-user me-1"></i> My Stock
+            </a>
+        </div>
+        {% endif %}
+
+        {% if session.get('user_role') != 'viewer' %}
+        <a href="{{ url_for('add_medicine') }}" class="btn btn-sm btn-primary">
+            <i class="fas fa-plus-circle me-1"></i> Add Medicine
+        </a>
+        {% endif %}
+        <a href="{{ url_for('export_pdf', scope=scope) }}" class="btn btn-sm btn-danger">
+            <i class="fas fa-file-pdf me-1"></i> PDF Audit Report
+        </a>
+        <a href="{{ url_for('export_csv', scope=scope) }}" class="btn btn-sm btn-outline-success">
+            <i class="fas fa-file-csv me-1"></i> Export CSV
+        </a>
+    </div>
+</div>
+
+<!-- Search & Filter Card -->
+<div class="card shadow-sm mb-4 border-0">
+    <div class="card-body p-3">
+        <form action="{{ url_for('inventory') }}" method="GET" class="row g-2 align-items-center">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" class="form-control" name="search" placeholder="Search by name, category, or batch..." value="{{ search }}">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select name="status" class="form-select">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Conditions</option>
+                    <option value="safe" {% if status_filter == 'safe' %}selected{% endif %}>Safe (> 30 Days)</option>
+                    <option value="soon" {% if status_filter == 'soon' %}selected{% endif %}>Expiring Soon (&le; 30 Days)</option>
+                    <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>Expired</option>
+                    <option value="low" {% if status_filter == 'low' %}selected{% endif %}>Low Stock Only</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i> Apply Filter</button>
+                {% if search or status_filter != 'all' %}
+                <a href="{{ url_for('inventory', scope=scope) }}" class="btn btn-outline-secondary" title="Clear Filters"><i class="fas fa-times"></i></a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Inventory Records Table -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 text-navy"><i class="fas fa-table-list me-2 text-primary"></i> Inventory Records ({{ medicines|length }})</h6>
+        <small class="text-muted"><i class="fas fa-info-circle text-info me-1"></i> Tap rows for audio expiry countdown (&le; 10 days)</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Medicine</th>
+                        <th>Category</th>
+                        <th>Batch Number</th>
+                        <th>In Stock</th>
+                        <th>Expiry Date</th>
+                        <th>Days Left</th>
+                        <th>Status</th>
+                        {% if session.get('user_role') == 'admin' and scope == 'all' %}
+                        <th>Logged By</th>
+                        {% endif %}
+                        {% if session.get('user_role') != 'viewer' %}
+                        <th class="text-end">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for med in medicines %}
+                    <tr class="row-interactive" onclick="checkMedicineExpiry('{{ med.name|escape }}', {{ med.days_remaining }})">
+                        <td>
+                            <div class="fw-bold text-navy">{{ med.name }}</div>
+                            <small class="text-muted">{{ med.manufacturer or 'Standard Manufacturer' }}</small>
+                        </td>
+                        <td><span class="badge bg-light text-dark border">{{ med.category }}</span></td>
+                        <td><code class="text-secondary fw-bold">{{ med.batch_number }}</code></td>
+                        <td>
+                            <span class="fw-bold fs-6">{{ med.quantity }}</span> <span class="text-muted small">units</span>
+                            {% if med.is_low_stock %}
+                            <span class="badge bg-danger rounded-pill ms-1" title="Below threshold ({{ med.minimum_stock }})"><i class="fas fa-arrow-down"></i> Low</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ med.expiry_date }}</td>
+                        <td>
+                            {% if med.days_remaining < 0 %}
+                            <span class="text-danger fw-bold"><i class="fas fa-times-circle me-1"></i>Expired {{ med.days_remaining|abs }}d ago</span>
+                            {% elif med.days_remaining == 0 %}
+                            <span class="text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i>Expires Today</span>
+                            {% elif med.days_remaining <= 10 %}
+                            <span class="text-warning fw-bold"><i class="fas fa-bell me-1"></i>{{ med.days_remaining }} days</span>
+                            {% else %}
+                            <span class="text-success"><i class="fas fa-calendar-check me-1"></i>{{ med.days_remaining }} days</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if med.status == 'Expired' %}
+                                <span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Expired</span>
+                            {% elif med.status == 'Expiring Soon' %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Expiring Soon</span>
+                            {% else %}
+                                <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Safe</span>
+                            {% endif %}
+                        </td>
+                        {% if session.get('user_role') == 'admin' and scope == 'all' %}
+                        <td>
+                            <span class="badge bg-light text-secondary border"><i class="fas fa-user-circle me-1"></i>{{ med.owner_name or 'System' }}</span>
+                        </td>
+                        {% endif %}
+                        {% if session.get('user_role') != 'viewer' %}
+                        <td class="text-end" onclick="event.stopPropagation();">
+                            {% if med.status == 'Expired' %}
+                            <a href="{{ url_for('quarantine_medicine', medicine_id=med.id) }}" class="btn btn-sm btn-outline-danger me-1" title="Quarantine & Destroy">
+                                <i class="fas fa-biohazard"></i>
+                            </a>
+                            {% endif %}
+                            <a href="{{ url_for('edit_medicine', id=med.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Medicine Details">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% if session.get('user_role') in ['admin', 'pharmacist'] %}
+                            <form action="{{ url_for('delete_medicine', id=med.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete {{ med.name }}?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Record">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-5 text-muted">
+                            <i class="fas fa-search fa-2x mb-2 d-block opacity-50"></i>
+                            No medicine records matched your search criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function checkMedicineExpiry(name, days) {
+    let msg = "";
+    if (days < 0) {
+        msg = "Warning: " + name + " has already expired " + Math.abs(days) + " days ago. Do not dispense.";
+    } else if (days === 0) {
+        msg = "Urgent: " + name + " expires today! Please inspect.";
+    } else if (days <= 10) {
+        msg = "Notice: " + name + " is expiring in " + days + " days.";
+    } else {
+        msg = name + " is safe with " + days + " days remaining until expiry.";
+    }
+
+    // Audio voice alert
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
+            const speech = new SpeechSynthesisUtterance(msg);
+            speech.lang = 'en-US';
+            speech.rate = 0.95;
+            speech.volume = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            if (voices && voices.length > 0) {
+                speech.voice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+            }
+            window.speechSynthesis.speak(speech);
+        }, 50);
+    }
+
+    // Non-blocking toast notification
+    let container = document.getElementById('inventoryToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'inventoryToastContainer';
+        container.style.position = 'fixed';
+        container.style.bottom = '24px';
+        container.style.right = '24px';
+        container.style.zIndex = '9999';
+        container.style.maxWidth = '360px';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    const toastClass = days < 0 ? 'alert-danger' : days <= 10 ? 'alert-warning' : 'alert-success';
+    toast.className = `alert ${toastClass} shadow-lg py-2 px-3 mb-2 border d-flex align-items-center justify-content-between fade show`;
+    toast.style.borderRadius = '8px';
+    toast.innerHTML = `<span class="small fw-semibold"><i class="fas fa-volume-high me-2"></i>${msg}</span><button type="button" class="btn-close btn-sm ms-2" onclick="this.parentElement.remove()"></button>`;
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
+}
+</script>
+{% endblock %}

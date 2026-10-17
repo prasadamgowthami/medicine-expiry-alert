@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Add New Medicine</h5>
+            </div>
+            
+            <div class="card-body bg-light border-bottom">
+                <h6><i class="fas fa-camera"></i> Auto-fill from Image (OCR)</h6>
+                <p class="text-muted small mb-2">Upload a picture of the medicine strip/bottle to auto-fill the details below. Requires Tesseract-OCR to be installed.</p>
+                <div class="input-group">
+                    <input type="file" class="form-control" id="medicineImage" accept="image/*">
+                    <button class="btn btn-secondary" type="button" id="btnExtract">Extract Details</button>
+                </div>
+                <div id="ocrStatus" class="mt-2 small text-primary" style="display:none;">Extracting text... please wait.</div>
+                <div id="ocrError" class="mt-2 small text-danger" style="display:none;"></div>
+            </div>
+
+            <div class="card-body">
+                <form action="{{ url_for('add_medicine') }}" method="POST">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Medicine Name *</label>
+                            <input type="text" class="form-control" name="name" id="medName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Category *</label>
+                            <input type="text" class="form-control" name="category" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Batch Number *</label>
+                            <input type="text" class="form-control" name="batch_number" id="medBatch" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Barcode / GTIN</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="barcode" id="medBarcode" placeholder="Scan or type barcode">
+                                <button type="button" class="btn btn-outline-primary" onclick="openScannerModal(fillBarcodeField)">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Manufacturer</label>
+                            <input type="text" class="form-control" name="manufacturer">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Quantity *</label>
+                            <input type="number" class="form-control" name="quantity" min="0" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Minimum Stock Level *</label>
+                            <input type="number" class="form-control" name="minimum_stock" min="0" value="10" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Manufacturing Date</label>
+                            <!-- Note: OCR might return generic date strings which might not perfectly map to type="date" (YYYY-MM-DD), so user might need to adjust -->
+                            <input type="date" class="form-control" name="manufacturing_date" id="mfg_date">
+                            <small class="text-muted" id="mfg_hint"></small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Expiry Date *</label>
+                            <input type="date" class="form-control" name="expiry_date" id="exp_date" required>
+                            <small class="text-muted" id="exp_hint"></small>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Purchase Date</label>
+                            <input type="date" class="form-control" name="purchase_date">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Supplier Name</label>
+                            <input type="text" class="form-control" name="supplier_name">
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary px-4">Add Medicine</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // OCR Extraction Logic
+    document.getElementById('btnExtract').addEventListener('click', function() {
+        const fileInput = document.getElementById('medicineImage');
+        const statusDiv = document.getElementById('ocrStatus');
+        const errorDiv = document.getElementById('ocrError');
+        
+        if(fileInput.files.length === 0) {
+            errorDiv.textContent = "Please select an image first.";
+            errorDiv.style.display = "block";
+            return;
+        }
+        
+        statusDiv.style.display = "block";
+        errorDiv.style.display = "none";
+        
+        const formData = new FormData();
+        formData.append('medicine_image', fileInput.files[0]);
+        
+        fetch("{{ url_for('extract_info') }}", {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(result => {
+            statusDiv.style.display = "none";
+            if(result.success) {
+                const data = result.data;
+                if(data.name) document.getElementById('medName').value = data.name;
+                if(data.batch_number) document.getElementById('medBatch').value = data.batch_number;
+                
+                // Dates are tricky because OCR might yield DD/MM/YY, but type="date" needs YYYY-MM-DD
+                // We'll put them in hints if they don't match
+                if(data.manufacturing_date) {
+                    document.getElementById('mfg_hint').textContent = "OCR Found: " + data.manufacturing_date;
+                }
+                if(data.expiry_date) {
+                    document.getElementById('exp_hint').textContent = "OCR Found: " + data.expiry_date;
+                }
+                
+                alert("Extraction complete! Check the form fields (Dates are placed as hints below the fields).");
+            } else {
+                errorDiv.textContent = "Error: " + result.error + ". Make sure Tesseract-OCR is installed on your Windows machine and configured.";
+                errorDiv.style.display = "block";
+            }
+        })
+        .catch(err => {
+            statusDiv.style.display = "none";
+            errorDiv.textContent = "Network Error: " + err;
+            errorDiv.style.display = "block";
+        });
+    });
+
+    // Simple JS validation for dates
+    document.querySelector('form').addEventListener('submit', function(e) {
+        var mfg = document.getElementById('mfg_date').value;
+        var exp = document.getElementById('exp_date').value;
+        if(mfg && exp && mfg > exp) {
+            e.preventDefault();
+            alert('Expiry date must be after manufacturing date.');
+        }
+    });
+
+    function fillBarcodeField(decodedText) {
+        document.getElementById('medBarcode').value = decodedText;
+        if(!document.getElementById('medBatch').value) {
+            document.getElementById('medBatch').value = decodedText;
+        }
+        alert("Barcode Scanned Successfully: " + decodedText);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicine Expiry Alert System</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for Advanced Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- HTML5 QR Code / Barcode Scanner -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+    {% if session.get('user_id') %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-navy shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('dashboard') }}">
+                <i class="fas fa-pills me-2 text-info"></i> 
+                <span>MedAlert <span class="badge bg-light text-navy" style="font-size: 0.65rem; vertical-align: middle;">PRO</span></span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-chart-pie me-1"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('inventory') }}"><i class="fas fa-boxes me-1"></i> Inventory</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-warning fw-semibold" href="{{ url_for('fefo_workspace') }}"><i class="fas fa-boxes-packing me-1"></i> FEFO Dispense</a>
+                    </li>
+                    {% if session.get('user_role') != 'viewer' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('add_medicine') }}"><i class="fas fa-plus-circle me-1"></i> Add Medicine</a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('disposals_log') }}"><i class="fas fa-biohazard me-1"></i> Quarantine Log</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('reports') }}"><i class="fas fa-file-alt me-1"></i> Reports</a>
+                    </li>
+                    {% if session.get('user_role') == 'admin' %}
+                    <li class="nav-item">
+                        <a class="nav-link text-info fw-semibold" href="{{ url_for('admin_users') }}"><i class="fas fa-user-shield me-1"></i> Admin</a>
+                    </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav ms-auto align-items-center gap-2">
+                    <!-- Quick Barcode Scanner Button -->
+                    <li class="nav-item">
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="openScannerModal(globalBarcodeFound)" title="Scan Barcode / QR Code">
+                            <i class="fas fa-barcode me-1"></i> Scan
+                        </button>
+                    </li>
+                    <!-- Desktop Notification Toggle -->
+                    <li class="nav-item">
+                        <button type="button" class="btn btn-sm btn-outline-light" id="btnRequestNotification" title="Enable Desktop Push Notifications">
+                            <i class="fas fa-bell"></i>
+                        </button>
+                    </li>
+                    <li class="nav-item text-white me-2">
+                        <span class="text-white-50 small">Signed in:</span>
+                        <strong class="text-white ms-1">{{ session.get('user_name') }}</strong>
+                        <span class="badge ms-1 
+                            {% if session.get('user_role') == 'admin' %}bg-danger
+                            {% elif session.get('user_role') == 'pharmacist' %}bg-primary
+                            {% elif session.get('user_role') == 'staff' %}bg-success
+                            {% else %}bg-secondary{% endif %}">
+                            {{ session.get('user_role', 'pharmacist')|upper }}
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="btn btn-sm btn-outline-light" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container-fluid px-4 mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                        <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'danger' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Live Barcode / QR Code Scanner Modal -->
+    <div class="modal fade" id="liveScannerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-navy text-white">
+                    <h5 class="modal-title"><i class="fas fa-camera me-2 text-info"></i> Live Barcode & QR Code Scanner</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="stopScanner()"></button>
+                </div>
+                <div class="modal-body text-center p-3">
+                    <p class="text-muted small mb-2">Align the medicine barcode or QR code inside the camera viewfinder.</p>
+                    <div id="scannerReader" style="width: 100%; min-height: 250px;" class="border rounded bg-dark"></div>
+                    <div id="scannerResult" class="alert alert-info py-2 small mt-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="stopScanner()" data-bs-dismiss="modal">Close</button>
+                    <span class="text-muted small"><i class="fas fa-qrcode me-1"></i> EAN-13, Code-128, QR Supported</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+    <!-- Global Barcode Scanner & Desktop Push Notification Script -->
+    <script>
+    let html5QrCode = null;
+    let onScanCallback = null;
+
+    function openScannerModal(callback) {
+        onScanCallback = callback;
+        const modal = new bootstrap.Modal(document.getElementById('liveScannerModal'));
+        modal.show();
+
+        const resultDiv = document.getElementById('scannerResult');
+        resultDiv.style.display = 'none';
+
+        setTimeout(() => {
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("scannerReader");
+            }
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 160 } },
+                (decodedText, decodedResult) => {
+                    resultDiv.textContent = "Scanned: " + decodedText;
+                    resultDiv.style.display = 'block';
+                    stopScanner();
+                    bootstrap.Modal.getInstance(document.getElementById('liveScannerModal')).hide();
+                    if (onScanCallback) {
+                        onScanCallback(decodedText);
+                    }
+                },
+                (errorMessage) => {
+                    // Ignore transient frame parsing errors
+                }
+            ).catch(err => {
+                resultDiv.textContent = "Camera access error: " + err;
+                resultDiv.style.display = 'block';
+            });
+        }, 300);
+    }
+
+    function stopScanner() {
+        if (html5QrCode && html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+            }).catch(err => console.error(err));
+        }
+    }
+
+    function globalBarcodeFound(decodedText) {
+        fetch("{{ url_for('search_barcode') }}?code=" + encodeURIComponent(decodedText))
+            .then(res => res.json())
+            .then(data => {
+                if (data.found && data.medicines.length > 0) {
+                    const firstMed = data.medicines[0];
+                    window.location.href = "{{ url_for('fefo_workspace') }}?drug_name=" + encodeURIComponent(firstMed.name);
+                } else {
+                    alert("Scanned Code: " + decodedText + "\nNo medicine currently registered with this barcode or batch.");
+                }
+            });
+    }
+
+    // ----------------------------------------------------
+    // BROWSER DESKTOP PUSH NOTIFICATIONS (HTML5 Notification API)
+    // ----------------------------------------------------
+    document.addEventListener("DOMContentLoaded", function() {
+        const notifBtn = document.getElementById('btnRequestNotification');
+        if (notifBtn) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                notifBtn.classList.replace('btn-outline-light', 'btn-light');
+                notifBtn.title = "Desktop Push Notifications Active";
+            }
+            notifBtn.addEventListener('click', function() {
+                if (!("Notification" in window)) {
+                    alert("This browser does not support desktop push notifications.");
+                    return;
+                }
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        new Notification("MedAlert Notifications Activated", {
+                            body: "You will now receive desktop alerts for expired and imminent medicines.",
+                            icon: "https://cdn-icons-png.flaticon.com/512/822/822143.png"
+                        });
+                        notifBtn.classList.replace('btn-outline-light', 'btn-light');
+                    }
+                });
+            });
+        }
+
+        // Check alert counts and trigger native desktop notification if permitted
+        if ("Notification" in window && Notification.permission === "granted") {
+            const hasPushed = sessionStorage.getItem('medalert_desktop_pushed');
+            if (!hasPushed) {
+                fetch("{{ url_for('api_alert_counts') }}")
+                    .then(res => res.json())
+                    .then(counts => {
+                        if (counts.expired > 0 || counts.expiring_7 > 0) {
+                            let title = "🚨 MedAlert Compliance Alert";
+                            let bodyMsg = "";
+                            if (counts.expired > 0) bodyMsg += counts.expired + " expired medicine(s) need quarantine! ";
+                            if (counts.expiring_7 > 0) bodyMsg += counts.expiring_7 + " medicine(s) expire within 7 days.";
+
+                            new Notification(title, {
+                                body: bodyMsg,
+                                icon: "https://cdn-icons-png.flaticon.com/512/822/822143.png"
+                            });
+                            sessionStorage.setItem('medalert_desktop_pushed', 'true');
+                        }
+                    });
+            }
+        }
+    });
+    </script>
+</body>
+</html>
